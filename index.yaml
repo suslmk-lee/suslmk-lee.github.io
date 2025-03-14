@@ -1,0 +1,21 @@
+apiVersion: v1
+entries:
+  ai-agent-demo:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-03-14T11:29:42.088864+09:00"
+    description: A Helm chart for AI Agent Demo application
+    digest: 13377f8ca876d6bfb791992610415f86905ea49afdecc7af37a3ea0bd76b4157
+    keywords:
+    - ai
+    - agent
+    - kubernetes
+    maintainers:
+    - email: mctlmk@gmail.com
+      name: suslmk
+    name: ai-agent-demo
+    type: application
+    urls:
+    - https://suslmk-lee.github.io/charts/ai-agent-demo-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-03-14T11:29:42.08807+09:00"
