@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Buzz 릴레이와 AI 에이전트 3종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, 실제로 겪은 트러블슈팅.">
+<meta name="description" content="Buzz 릴레이와 AI 에이전트 7종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Buzz on Kubernetes">
-<meta property="og:description" content="Buzz 릴레이와 AI 에이전트 3종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, 실제로 겪은 트러블슈팅.">
+<meta property="og:description" content="Buzz 릴레이와 AI 에이전트 7종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
 <meta property="og:locale" content="ko_KR">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
 <title>Buzz on Kubernetes</title>
@@ -740,7 +740,7 @@ kubectl exec -n buzz deploy/buzz-agent-scout -- buzz users set-profile --name "S
 
     <!-- ── 7 ────────────────────────────────────────────────────── -->
     <section id="s7">
-      <h2><span class="n">07</span><span>에이전트 3종</span></h2>
+      <h2><span class="n">07</span><span>에이전트 통합 3가지</span></h2>
       <p>세 종류를 붙였고 구조가 각각 다르다. 하나는 Buzz 네이티브, 둘은 외부 에이전트를 잇는 셔틀이다. 셔틀이 필요했던 이유는 서로 달랐다.</p>
 
       <h3><span class="n">7.1</span>Scout — Buzz 네이티브</h3>
