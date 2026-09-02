@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Buzz 릴레이와 AI 에이전트를 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, 설정 근거, 실제로 겪은 트러블슈팅.">
+<meta name="description" content="Buzz 릴레이와 AI 에이전트 3종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, 실제로 겪은 트러블슈팅.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Buzz on Kubernetes">
-<meta property="og:description" content="Buzz 릴레이와 AI 에이전트를 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, 설정 근거, 실제로 겪은 트러블슈팅.">
+<meta property="og:description" content="Buzz 릴레이와 AI 에이전트 3종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, 실제로 겪은 트러블슈팅.">
 <meta property="og:locale" content="ko_KR">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
 <title>Buzz on Kubernetes</title>
@@ -671,8 +671,8 @@ footer {
 
 <span class="c"># Zalando 오퍼레이터가 전역으로 요구하는 시크릿.</span>
 <span class="c"># 없으면 StatefulSet 이 생성되지 않는다 (§9.1).</span>
-kubectl get secret spilo-wal-backup-env -n <기존 네임스페이스> -o yaml \
-  | sed -e 's/^  namespace: <기존>$/  namespace: buzz/' \
+kubectl get secret spilo-wal-backup-env -n &lt;기존 네임스페이스&gt; -o yaml \
+  | sed -e 's/^  namespace: &lt;기존&gt;$/  namespace: buzz/' \
         -e '/^  creationTimestamp:/d' -e '/^  resourceVersion:/d' -e '/^  uid:/d' \
   | kubectl apply -n buzz -f -
 
@@ -719,7 +719,7 @@ kubectl -n buzz create secret generic buzz-secrets \
 kubectl exec -n buzz deploy/buzz -- buzz-admin add-member --pubkey &lt;pubkey&gt;
 
 kubectl apply -f agent-scout.yaml      <span class="c"># OpenAI</span>
-kubectl apply -f agent-samanda.yaml    <span class="c"># KosmosAI agent-api</span>
+kubectl apply -f agent-samanda.yaml    <span class="c"># 사내 agent API</span>
 
 <span class="c"># 채널 참여 + 프로필 — 에이전트가 스스로 수행한다</span>
 kubectl exec -n buzz deploy/buzz-agent-scout -- buzz channels join --channel &lt;UUID&gt;
@@ -728,8 +728,8 @@ kubectl exec -n buzz deploy/buzz-agent-scout -- buzz users set-profile --name "S
 
     <!-- ── 7 ────────────────────────────────────────────────────── -->
     <section id="s7">
-      <h2><span class="n">07</span><span>에이전트 2종</span></h2>
-      <p>두 에이전트는 구조가 다르다. 하나는 Buzz 네이티브고, 하나는 외부 에이전트를 잇는 셔틀이다.</p>
+      <h2><span class="n">07</span><span>에이전트 3종</span></h2>
+      <p>세 종류를 붙였고 구조가 각각 다르다. 하나는 Buzz 네이티브, 둘은 외부 에이전트를 잇는 셔틀이다. 셔틀이 필요했던 이유는 서로 달랐다.</p>
 
       <h3><span class="n">7.1</span>Scout — Buzz 네이티브</h3>
       <p><code>buzz-agent</code>가 도구 루프를 직접 돌린다. <code>buzz</code> CLI로 메시지 발행, 이슈 생성, PR 열기까지 가능하다. <strong>커스텀 이미지가 필요 없다</strong> — <code>buzz-agent</code>가 sprig 이미지에 이미 들어 있다.</p>
@@ -775,6 +775,70 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
           </tbody>
         </table>
       </div>
+
+      <h3><span class="n">7.3</span>Hermes — ACP를 말하는데도 셔틀이 필요했다</h3>
+      <p><a href="https://github.com/NousResearch" target="_blank" rel="noopener">Nous Research</a>의 Hermes Agent를 역할별로 5개 붙였다. <code>hermes acp</code> 서브커맨드가 있어 처음엔 셔틀 없이 바로 연결했다. ACP 핸드셰이크도 통과했다.</p>
+      <p>그런데 <strong>답을 하지 않았다.</strong> 멘션을 받고 반응 이모지까지 남긴 뒤, 도구를 20회 넘게 돌리며 환경을 탐색하다 아무것도 발행하지 않고 턴을 끝냈다.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>시도</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr><td>SOUL 프로필에 "반드시 발행하라" 규칙 추가</td><td>변화 없음</td></tr>
+            <tr><td><code>&lt;base&gt;</code> 프롬프트 제거 (22k → 13.5k 토큰)</td><td>변화 없음</td></tr>
+            <tr><td>모델 교체 (사내 vLLM → OpenAI)</td><td><strong>동일</strong> — 모델 문제가 아님</td></tr>
+            <tr><td><code>platform_toolsets</code>로 도구 제한</td><td>ACP 경로에 적용되지 않음</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>두 모델이 같은 행동을 보인 것이 결정적이었다. <strong>모델이 아니라 모드의 문제였다.</strong></p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>모드</th><th>성격</th><th><code>-t</code> 도구 제한</th></tr></thead>
+          <tbody>
+            <tr><td><code>hermes acp</code></td><td>자율 세션 — 에디터가 옆에 있다고 가정하고 스스로 작업</td><td><strong>불가</strong></td></tr>
+            <tr><td><code>hermes -z</code></td><td>한 번 묻고 한 번 답함</td><td><strong>가능</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>ACP의 일반 계약은 <strong>클라이언트가 에이전트의 <code>agent_message_chunk</code>를 렌더링</strong>하는 것이다. Zed나 VS Code가 그렇게 동작한다. 그런데 Buzz는 그 청크를 로그로만 남기고, 채널 발행은 오직 도구 호출로만 일어난다. Claude Code나 Goose가 잘 붙는 것은 하네스가 MCP로 CLI를 쥐여주고 기본 프롬프트로 훈련시키기 때문이다. Hermes는 자기 판단으로 움직였다.</p>
+
+      <p>그래서 Samanda와 같은 셔틀을 하나 더 만들었다. <code>hermes -z</code>를 호출하고 발행까지 맡는다.</p>
+      <pre><code>buzz-acp ──ACP/stdio──▶ hermes-acp ──subprocess──▶ hermes -t &lt;toolsets&gt; -z "..."
+                            │
+                            └─▶ buzz messages send</code></pre>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>자율 모드</th><th>셔틀 경유</th></tr></thead>
+          <tbody>
+            <tr><td>LLM 왕복</td><td>25회</td><td><strong>1회</strong></td></tr>
+            <tr><td>소요</td><td>7분 초과</td><td><strong>12.8초</strong></td></tr>
+            <tr><td>발행</td><td>없음</td><td><strong>성공</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>도구는 역할에 맞게 다르게 준다. 조율만 하는 역할은 도구가 없는 편이 빠르고, 조사가 필요한 역할에만 셸과 파일 접근을 준다.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>역할</th><th>툴셋</th></tr></thead>
+          <tbody>
+            <tr><td>PM</td><td><code>clarify</code> — 조율만, 조사 불필요</td></tr>
+            <tr><td>Dev</td><td><code>terminal,file,code_execution</code></td></tr>
+            <tr><td>DevOps · Security</td><td><code>terminal,file</code></td></tr>
+            <tr><td>QA</td><td><code>terminal,code_execution</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note crit">
+        <span class="lbl">이중 발행 주의</span>
+        <p>발행 주체가 셔틀로 바뀌면 프로필의 "직접 <code>buzz messages send</code>로 발행하라" 지시를 <strong>반드시 함께 걷어내야 한다.</strong> 셸 도구를 가진 역할이 그 지시를 따르면 같은 답이 두 번 올라간다.</p>
+      </div>
     </section>
 
     <!-- ── 8 ────────────────────────────────────────────────────── -->
@@ -809,7 +873,7 @@ strategy: { type: Recreate }   <span class="c"># RollingUpdate 면 같은 nsec �
         <h4><span class="n">9.1</span><span>buzz-db가 Creating에서 멈춤</span></h4>
         <pre><code>could not generate Spilo env vars: could not read Secret PodEnvironmentSecretName:
 still failing after 200 retries: secrets "spilo-wal-backup-env" not found</code></pre>
-        <p>Zalando 오퍼레이터가 <code>pod_environment_secret</code>을 전역(<code>watched_namespace: *</code>)으로 요구한다. postgresql CR이 있는 네임스페이스마다 그 시크릿이 있어야 한다 → §6.1. 같은 이유로 <code>postgres-system</code>의 다른 네임스페이스의 postgresql CR들가 SyncFailed 상태이며, 동일하게 복사하면 해소된다.</p>
+        <p>Zalando 오퍼레이터가 <code>pod_environment_secret</code>을 전역(<code>watched_namespace: *</code>)으로 요구한다. postgresql CR이 있는 네임스페이스마다 그 시크릿이 있어야 한다 → §6.1. 같은 이유로 <code>postgres-system</code>의 다른 postgresql CR가 SyncFailed 상태이며, 동일하게 복사하면 해소된다.</p>
       </div>
 
       <div class="fault">
@@ -879,6 +943,21 @@ kubectl exec -n buzz buzz-db-0 -c postgres -- \
 kubectl logs -n buzz -l app=buzz-agent-samanda -c harness | grep "stream done"</code></pre>
         <p><code>terminator=[DONE]</code>이면 정상 종료, <code>terminator=EOF</code>면 연결이 중간에 끊긴 것(프록시 idle timeout 계열)이다.</p>
       </div>
+
+      <div class="fault">
+        <h4><span class="n">9.9</span><span>범용 에이전트가 답을 만들고도 발행하지 않음</span></h4>
+        <p>Buzz는 도구 호출로만 채널에 글이 올라간다. 코딩 에이전트처럼 도구가 많은 상대는 프롬프트를 <strong>조사할 과제</strong>로 받아들여, 답을 만들고도 발행 단계에 도달하지 못한다. 로그에는 도구 성공만 남고 오류가 없어 원인이 잘 보이지 않는다.</p>
+        <p>배관을 의심하기 전에 <strong>도구가 성공하는데 발행만 없는지</strong> 확인하면 빠르다. 그렇다면 막힌 게 아니라 부르지 않는 것이다. §7.3의 셔틀 패턴으로 우회한다.</p>
+      </div>
+
+      <div class="fault">
+        <h4><span class="n">9.10</span><span>에이전트가 도구 실행 시 환경변수를 걸러냄</span></h4>
+        <pre><code>{"error":"auth_error","message":"auth error: BUZZ_PRIVATE_KEY is required"}</code></pre>
+        <p>시크릿 유출을 막기 위해 명령 실행 환경을 새로 구성하는 에이전트가 있다. 컨테이너 env에 키를 넣어도 도구가 실행하는 명령에는 전달되지 않는다. 로그인 셸의 PATH 재설정도 같은 계열의 증상이다.</p>
+        <p>키를 파일에 두고 얇은 래퍼가 주입하는 것으로 푼다. <code>argv</code>에 넣으면 <code>ps</code>에 노출되므로 env로 넘긴다.</p>
+        <pre><code>#!/bin/sh
+BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pre>
+      </div>
     </section>
 
     <!-- ── 10 ───────────────────────────────────────────────────── -->
@@ -927,7 +1006,7 @@ kubectl logs -n buzz -l app=buzz-agent-samanda -c harness | grep "stream done"</
             <tr><td>Samanda 셔틀 배포 형태</td><td><span class="chip open">임시</span></td><td>ConfigMap + initContainer. 안정화되면 sprig+python3+shim 단일 이미지로 구워 Harbor에 올릴 것</td></tr>
             <tr><td><code>openai_compat.py</code> SSE 하트비트</td><td><span class="chip open">미수정</span></td><td>도구 실행 구간에 바이트가 흐르지 않아 클라이언트 타임아웃을 유발한다. <code>status</code>/<code>tool_calls</code> 이벤트에 keepalive를 흘리는 것이 근본 수정</td></tr>
             <tr><td><code>openai_compat.py</code> <code>done</code> 이벤트</td><td><span class="chip open">미수정</span></td><td>내용을 버린다. 입력 필터 차단 등 <code>done</code>으로만 답이 오는 경로에서 빈 응답이 된다</td></tr>
-            <tr><td>다른 네임스페이스의 postgresql CR들</td><td><span class="chip stop">SyncFailed</span></td><td>§9.1과 동일 원인. 시크릿 복사로 해소된다</td></tr>
+            <tr><td>다른 postgresql CR</td><td><span class="chip stop">SyncFailed</span></td><td>§9.1과 동일 원인. 시크릿 복사로 해소된다</td></tr>
             <tr><td>GitOps</td><td><span class="chip open">미도입</span></td><td>현재 <code>helm</code> + <code>kubectl</code> 직접 실행. ArgoCD로 옮길 경우 차트의 secret autogen은 GitOps-safe하지 않으므로 <code>existingSecret</code> 유지가 필수다</td></tr>
           </tbody>
         </table>
@@ -1002,7 +1081,7 @@ kubectl logs -n buzz -l app=buzz-agent-samanda -c harness | grep "stream done"</
   </main>
 
   <footer>
-    Buzz on Kubernetes · 2026-08-28 · <a href="https://github.com/block/buzz">block/buzz</a>
+    Buzz on Kubernetes · 2026-09-02 · <a href="https://github.com/block/buzz">block/buzz</a>
   </footer>
 
 </div>
