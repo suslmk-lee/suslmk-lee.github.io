@@ -249,6 +249,15 @@ h3 {
 }
 h3 .n { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); font-weight: 500; margin-right: 8px; }
 
+section > h4 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+  margin: 26px 0 8px;
+  color: var(--ink-2);
+}
+
 p { max-width: var(--measure); margin: 0 0 16px; }
 p.lede { color: var(--ink-2); font-size: 18px; }
 
@@ -611,6 +620,7 @@ footer {
           <div class="drow">
             <div class="dnode"><b>Scout</b><i>buzz-agent → OpenAI</i></div>
             <div class="dnode"><b>Samanda</b><i>samanda-acp 셔틀<br>→ agent-api 내부 직결</i></div>
+            <div class="dnode"><b>Hermes ×5</b><i>hermes-acp 셔틀<br>→ hermes -z → LiteLLM</i></div>
           </div>
         </div>
       </div>
@@ -622,7 +632,9 @@ footer {
         <div><dt>redis</dt><dd><span class="chip run">running</span></dd></div>
         <div><dt>scout</dt><dd><span class="chip run">running</span></dd></div>
         <div><dt>samanda</dt><dd><span class="chip run">running</span></dd></div>
+        <div><dt>hermes ×5</dt><dd><span class="chip run">running</span></dd></div>
       </dl>
+      <p>pm / dev / devops / qa / security. 역할마다 <code>SOUL.md</code>와 허용 toolset이 다르다 — §7.3.</p>
 
       <div class="tw">
         <table>
@@ -975,8 +987,33 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
       <pre><code>kubectl get secret buzz-secrets -n buzz \
   -o jsonpath='{.data.BUZZ_RELAY_PRIVATE_KEY}' | base64 -d</code></pre>
 
-      <h3><span class="n">10.2</span>업그레이드</h3>
-      <p>마이그레이션은 릴레이 바이너리에 내장돼 있고 <code>BUZZ_AUTO_MIGRATE=true</code>로 기동 시 실행된다. 다중 복제본은 Postgres advisory lock으로 안전하다. <strong><code>helm upgrade</code>가 업그레이드 절차의 전부다.</strong></p>
+      <h3><span class="n">10.2</span>업그레이드 — GitOps</h3>
+      <p>배포는 ArgoCD app-of-apps로 옮겨졌다. 매니페스트는 <code>AI-InfraOps/buzz</code>, Application은 <code>CICD/gitops</code>에 산다. 마이그레이션은 릴레이 바이너리에 내장돼 있고 <code>BUZZ_AUTO_MIGRATE=true</code>로 기동 시 실행되며, 다중 복제본은 Postgres advisory lock으로 안전하다.</p>
+      <p><strong>이미지 태그는 전부 다이제스트로 고정한다.</strong> 업스트림에 시맨틱 태그가 없어(<code>latest</code> / <code>main</code> / <code>sha-*</code>) 움직이는 태그를 직접 참조하면 어제와 오늘의 배포가 달라진다.</p>
+
+      <h4>에이전트 — 자동</h4>
+      <p><code>argocd-image-updater</code>가 2분마다 업스트림을 보고, 새 이미지가 있으면 <code>k8s/kustomization.yaml</code>의 <code>images</code>를 <strong>저장소 main에 직접 커밋</strong>한다. ArgoCD가 그 커밋을 받아 롤아웃한다. 흔히 쓰는 <code>.argocd-source-*.yaml</code> 오버라이드 방식은 저장소와 실물을 어긋나게 하므로 쓰지 않았다.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>이미지</th><th>쓰는 곳</th><th>전략</th></tr></thead>
+          <tbody>
+            <tr><td><code>ghcr.io/block/buzz-sprig:main</code></td><td>에이전트 7개 전부의 initContainer</td><td><code>digest</code> — 움직이는 태그의 다이제스트를 추적</td></tr>
+            <tr><td><code>nousresearch/hermes-agent</code></td><td>Hermes 5개</td><td><code>semver</code> — <code>vYYYY.M.D</code> 중 최신</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="lbl">v1.x는 CRD 방식이다</span>
+        <p><code>argocd-image-updater</code> v1.1.1은 Application 어노테이션을 읽지 않는다. 로그의 <code>controllerKind=ImageUpdater</code>가 그 신호다. 설정은 <code>ImageUpdater</code> 커스텀 리소스로 쓴다. 어노테이션만 붙여 두면 오류도 없이 아무 일도 일어나지 않는다.</p>
+      </div>
+      <p><code>digest</code> 전략은 <strong>어느 태그를 추적할지 이미지 이름에 적어야 한다</strong>. 빠뜨리면 매 주기 <code>cannot use update strategy 'digest' ... without a version constraint</code>로 실패한다.</p>
+      <pre><code>kubectl -n argocd logs deploy/argocd-image-updater-controller | grep "Processing results"
+# images_considered=2 images_skipped=0 images_updated=2 errors=0</code></pre>
+
+      <h4>릴레이 — 수동, 알림만 자동</h4>
+      <p><strong>릴레이는 자동 갱신 대상에서 뺐다.</strong> <code>BUZZ_AUTO_MIGRATE=true</code>이므로 이미지 교체가 곧 비가역 DB 마이그레이션이다. 컨트롤러가 새벽에 조용히 스키마를 바꾸게 둘 수는 없다.</p>
+      <p>대신 <code>relay-update-notify</code> CronJob이 매일 09:00 KST에 살아있는 <code>Deployment/buzz</code>의 다이제스트와 업스트림 <code>latest</code>를 비교하고, 다르면 팀 채널에 메시지를 보낸다. 적용은 사람이 <code>values-prod.yaml</code>을 고쳐 커밋한다.</p>
+      <p>비교 대상을 매니페스트에 상수로 베껴 두지 않고 <strong>클러스터에서 직접 읽는 것이 요점이다.</strong> 베껴 두면 릴레이를 올릴 때 그 값도 같이 고쳐야 하고, 잊는 순간 매일 거짓 알림이 온다 — 자동화 안에 수동 단계를 남기는 셈이다. 릴레이가 다이제스트 없이 태그로만 고정돼 있으면 값이 비고 잡이 실패한다. 조용히 틀린 비교를 하는 것보다 낫다.</p>
 
       <h3><span class="n">10.3</span>HA로 확장할 때</h3>
       <ul>
@@ -1007,7 +1044,8 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
             <tr><td><code>openai_compat.py</code> SSE 하트비트</td><td><span class="chip open">미수정</span></td><td>도구 실행 구간에 바이트가 흐르지 않아 클라이언트 타임아웃을 유발한다. <code>status</code>/<code>tool_calls</code> 이벤트에 keepalive를 흘리는 것이 근본 수정</td></tr>
             <tr><td><code>openai_compat.py</code> <code>done</code> 이벤트</td><td><span class="chip open">미수정</span></td><td>내용을 버린다. 입력 필터 차단 등 <code>done</code>으로만 답이 오는 경로에서 빈 응답이 된다</td></tr>
             <tr><td>다른 postgresql CR</td><td><span class="chip stop">SyncFailed</span></td><td>§9.1과 동일 원인. 시크릿 복사로 해소된다</td></tr>
-            <tr><td>GitOps</td><td><span class="chip open">미도입</span></td><td>현재 <code>helm</code> + <code>kubectl</code> 직접 실행. ArgoCD로 옮길 경우 차트의 secret autogen은 GitOps-safe하지 않으므로 <code>existingSecret</code> 유지가 필수다</td></tr>
+            <tr><td>GitOps</td><td><span class="chip run">도입</span></td><td>ArgoCD app-of-apps + Kustomize. 에이전트 이미지는 git write-back으로 자동 갱신, 릴레이는 알림만. §10.2</td></tr>
+            <tr><td>Hermes 핫픽스 태그</td><td><span class="chip open">수동</span></td><td><code>v2026.7.7.2</code>처럼 4자리인 태그는 semver 파싱에서 걸러진다. 급하면 손으로 올리고, 아니면 다음 정규 릴리스에 함께 들어온다</td></tr>
           </tbody>
         </table>
       </div>
