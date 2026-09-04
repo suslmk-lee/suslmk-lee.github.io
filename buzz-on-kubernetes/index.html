@@ -877,7 +877,7 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
         <li><strong>Host → 커뮤니티</strong> — <code>communities.host</code> (<code>UNIQUE(lower(host))</code>) 조회. <code>buzz_core::tenant::normalize_host()</code>는 <code>:443</code>과 <code>:80</code>만 제거한다. 서비스 DNS(<code>:3000</code>)로 붙으면 <strong>404</strong>.</li>
         <li><strong>NIP-42 relay 태그</strong> — <code>buzz_auth::nip42::normalize_relay_url()</code>은 <strong>스킴을 정규화하지 않는다.</strong> <code>ws://</code>로 붙으면 <code>RelayUrlMismatch</code> → <code>nip42_invalid</code>.</li>
       </ol>
-      <p>그래서 클러스터 안의 에이전트도 공개 URL 그대로 <code>wss://buzz.example.com</code>로 붙고, <code>hostAliases</code>로 인그레스 IP를 가리킨다.</p>
+      <p>그래서 클러스터 안의 에이전트도 서비스 DNS가 아니라 <strong>공개 URL 그대로</strong> <code>wss://buzz.example.com</code>로 붙는다. 헤어핀 NAT를 한 번 거치지만, 그게 Host와 relay 태그를 동시에 맞추는 유일한 방법이다.</p>
 
       <h3><span class="n">8.2</span>키페어 하나 = 인스턴스 하나</h3>
       <pre><code>replicas: 1
@@ -918,7 +918,8 @@ still failing after 200 retries: secrets "spilo-wal-backup-env" not found</code>
         <h4><span class="n">9.4</span><span>외부에서 404 — DNS</span></h4>
         <p><code>*.example.com</code> 와일드카드가 <code>203.0.113.99</code>로 잡혀 있고 실제 서비스는 <code>203.0.113.10</code>이다. 개별 A 레코드가 필요하다.</p>
         <pre><code>buzz.example.com   A   203.0.113.10</code></pre>
-        <p>레코드 추가 전에는 클라이언트마다 hosts 우회. 와일드카드 인증서라 TLS는 그대로 검증되고, 데스크톱은 <code>reqwest</code> / <code>tokio-tungstenite</code>를 시스템 리졸버로 쓰므로 hosts가 적용된다.</p>
+        <p><strong>와일드카드에 기대면 안 된다.</strong> 와일드카드는 다른 IP를 가리키므로 명시 레코드가 없으면 404다. 반대로 "와일드카드가 있으니 중복"이라 판단해 명시 레코드를 지우면 다시 404가 된다.</p>
+        <p>레코드가 들어가기 전 임시로 클라이언트마다 hosts 우회를 쓸 수는 있다. 와일드카드 인증서라 TLS는 그대로 검증되고, 데스크톱은 <code>reqwest</code> / <code>tokio-tungstenite</code>를 시스템 리졸버로 쓰므로 hosts가 적용된다. 다만 <strong>모바일 클라이언트에는 쓸 수 없고, 파드에 <code>hostAliases</code>로 같은 우회를 넣으면 공인 IP가 바뀔 때 파드만 옛 IP를 계속 쓴다.</strong> 임시 수단으로만 쓰고, 레코드가 들어가면 즉시 걷어낼 것.</p>
         <pre><code>echo "203.0.113.10 buzz.example.com" | sudo tee -a /etc/hosts
 <span class="c"># Buzz Desktop 완전 종료 후 재시작 — 앱이 DNS 를 캐시한다</span></code></pre>
       </div>
@@ -1053,7 +1054,7 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
         <table>
           <thead><tr><th>항목</th><th>상태</th><th>내용</th></tr></thead>
           <tbody>
-            <tr><td>DNS A 레코드</td><td><span class="chip open">미반영</span></td><td>사용자마다 <code>/etc/hosts</code> 우회 중. 모바일 클라이언트는 이 방식이 불가능하다</td></tr>
+            <tr><td>DNS A 레코드</td><td><span class="chip run">반영</span></td><td><code>buzz.quantumcns.ai</code> 명시 A 레코드 등록(와일드카드는 다른 IP를 가리키므로 명시 레코드가 필요하다). <code>/etc/hosts</code> 우회와 파드의 <code>hostAliases</code>를 모두 걷어냈다 — 공인 IP가 바뀌면 파드만 옛 IP를 계속 쓴다</td></tr>
             <tr><td>Samanda 셔틀 배포 형태</td><td><span class="chip open">임시</span></td><td>ConfigMap + initContainer. 안정화되면 sprig+python3+shim 단일 이미지로 구워 Harbor에 올릴 것</td></tr>
             <tr><td><code>openai_compat.py</code> SSE 하트비트</td><td><span class="chip open">미수정</span></td><td>도구 실행 구간에 바이트가 흐르지 않아 클라이언트 타임아웃을 유발한다. <code>status</code>/<code>tool_calls</code> 이벤트에 keepalive를 흘리는 것이 근본 수정</td></tr>
             <tr><td><code>openai_compat.py</code> <code>done</code> 이벤트</td><td><span class="chip open">미수정</span></td><td>내용을 버린다. 입력 필터 차단 등 <code>done</code>으로만 답이 오는 경로에서 빈 응답이 된다</td></tr>
