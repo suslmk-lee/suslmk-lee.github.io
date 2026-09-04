@@ -840,7 +840,7 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
         <table>
           <thead><tr><th>역할</th><th>툴셋</th><th>모델</th></tr></thead>
           <tbody>
-            <tr><td>PM</td><td><code>clarify</code> — 조율만, 조사 불필요</td><td><code>claude-sonnet-5</code></td></tr>
+            <tr><td>PM</td><td><code>clarify,terminal</code> — 채널 이력 조회까지</td><td><code>claude-sonnet-5</code></td></tr>
             <tr><td>Dev</td><td><code>terminal,file,code_execution</code></td><td><code>claude-sonnet-5</code></td></tr>
             <tr><td>QA</td><td><code>terminal,code_execution</code></td><td><code>claude-sonnet-5</code></td></tr>
             <tr><td>DevOps · Security</td><td><code>terminal,file</code></td><td><code>gpt-5.4-mini</code></td></tr>
@@ -850,6 +850,22 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
       <p>그래서 모델은 <strong>ConfigMap을 쪼개지 않고</strong> 에이전트별 env 한 줄로 갈린다. 배치를 바꾸는 게 한 줄 옮기기가 되고, 재시작 한 번이면 끝난다. Hermes는 <code>-z</code>(oneshot) 경로에서 <code>HERMES_INFERENCE_MODEL</code>을 읽고, 셔틀이 쓰는 게 정확히 그 경로다. 설정 파일을 복제하면 나머지 항목이 곧 어긋난다.</p>
       <pre><code>- { name: HERMES_INFERENCE_MODEL, value: "gpt-5.4-mini" }
 <span class="c"># 이 줄이 없으면 config.yaml 의 model.default 로 떨어진다</span></code></pre>
+      <div class="note crit">
+        <span class="lbl">없는 도구를 약속하게 두지 말 것</span>
+        <p>PM에게 처음엔 <code>clarify</code>만 줬다. 그런데 SOUL 프로필은 <code>buzz messages get/search</code>로 채널 이력을 보라고 지시하고 있었다. 실행할 수단이 없는 지시를 받은 모델은 <strong>"도구가 제공되지 않아 확인할 수 없습니다. 다음 턴에 실제 조회 도구로 확인하겠습니다"</strong>라고 답한다. 툴셋은 env로 고정되어 있으므로 그 턴은 영원히 오지 않는다.</p>
+        <p>프로필과 툴셋은 <strong>같이 고쳐야 한다.</strong> 도구를 좁힐 거면 그 도구를 쓰라는 지시도 함께 지워야 하고, 지시를 남길 거면 도구를 줘야 한다. 프로필에는 가진 도구·갖지 않은 도구·넘길 대상을 명시하고, 조회 횟수 상한을 둬 탐색이 길어지는 것을 막았다.</p>
+      </div>
+
+      <div class="fault">
+        <h4><span class="n">함정</span><span>키 파일은 root, 에이전트는 uid 10000</span></h4>
+        <p>도구를 줬는데도 조회가 안 됐다. <code>buzz-acp</code>는 root로 돌지만 <strong>Hermes는 uid 10000</strong>이다. Hermes의 terminal 도구는 시크릿 유출을 막으려 환경변수를 걸러내므로, 키를 파일에 두고 래퍼가 주입하는 구조를 썼는데 — 그 파일이 <code>umask 077</code>로 <code>root:root 0600</code>이었다.</p>
+        <pre><code>cat: /opt/buzz/.key: Permission denied
+error: key error: invalid BUZZ_PRIVATE_KEY: Invalid secret key</code></pre>
+        <p>래퍼의 <code>$(cat ...)</code>이 <strong>조용히 빈 문자열</strong>이 되어 키가 비었다는 게 아니라 "잘못된 키"로 보고된다. 파일의 존재 이유가 그 사용자가 읽는 것이므로 소유자를 넘긴다 — 권한은 <code>0600</code> 그대로다.</p>
+        <pre><code>chown 10000:10000 /opt/buzz/.key</code></pre>
+        <p>에이전트 5개가 모두 같은 상태였다. 발행은 셔틀이 대신하므로 <strong>조회를 실제로 시켜보기 전까지 드러나지 않았다.</strong></p>
+      </div>
+
       <div class="note">
         <span class="lbl">프로바이더 이름이 <code>openai</code> 여야 한다</span>
         <p>모델만 주면 Hermes가 <strong>모델명에서 프로바이더를 자동 감지</strong>하는데, <code>gpt-*</code>는 <code>openai</code>로 풀린다. <code>config.yaml</code>의 프로바이더를 <code>openai-direct</code> 같은 다른 이름으로 두면 <code>Unknown provider 'openai'</code>로 죽는다. <code>HERMES_INFERENCE_PROVIDER</code>를 줘도 자동 감지가 이긴다.</p>
