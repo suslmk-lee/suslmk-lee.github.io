@@ -835,20 +835,21 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
       </div>
 
       <p>도구는 역할에 맞게 다르게 준다. 조율만 하는 역할은 도구가 없는 편이 빠르고, 조사가 필요한 역할에만 셸과 파일 접근을 준다.</p>
-      <p><strong>툴셋은 그 역할이 얼마나 깊이 파는지를 그대로 말해준다.</strong> 그래서 모델도 같은 선을 따라 나눴다 — 실행 도구가 없는 역할에까지 비싼 모델을 쓸 이유가 없다.</p>
+      <p>모델도 역할마다 다르게 준다. 툴셋과 같은 선을 따르지는 않는다 — 어느 역할에 어느 모델이 맞는지는 실제로 굴려보고 정할 문제라, 옮기기 쉬운 구조로 두는 편이 낫다.</p>
       <div class="tw">
         <table>
           <thead><tr><th>역할</th><th>툴셋</th><th>모델</th></tr></thead>
           <tbody>
-            <tr><td>PM</td><td><code>clarify</code> — 조율만, 조사 불필요</td><td><code>gpt-5.4-mini</code></td></tr>
-            <tr><td>QA</td><td><code>terminal,code_execution</code></td><td><code>gpt-5.4-mini</code></td></tr>
+            <tr><td>PM</td><td><code>clarify</code> — 조율만, 조사 불필요</td><td><code>claude-sonnet-5</code></td></tr>
             <tr><td>Dev</td><td><code>terminal,file,code_execution</code></td><td><code>claude-sonnet-5</code></td></tr>
-            <tr><td>DevOps · Security</td><td><code>terminal,file</code></td><td><code>claude-sonnet-5</code></td></tr>
+            <tr><td>QA</td><td><code>terminal,code_execution</code></td><td><code>claude-sonnet-5</code></td></tr>
+            <tr><td>DevOps · Security</td><td><code>terminal,file</code></td><td><code>gpt-5.4-mini</code></td></tr>
           </tbody>
         </table>
       </div>
-      <p>모델은 <strong>ConfigMap을 쪼개지 않고</strong> 에이전트별 env 한 줄로 갈린다. Hermes는 <code>-z</code>(oneshot) 경로에서 <code>HERMES_INFERENCE_MODEL</code>을 읽고, 셔틀이 쓰는 게 정확히 그 경로다. 설정 파일을 복제하면 나머지 항목이 곧 어긋난다.</p>
-      <pre><code>- { name: HERMES_INFERENCE_MODEL, value: "gpt-5.4-mini" }</code></pre>
+      <p>그래서 모델은 <strong>ConfigMap을 쪼개지 않고</strong> 에이전트별 env 한 줄로 갈린다. 배치를 바꾸는 게 한 줄 옮기기가 되고, 재시작 한 번이면 끝난다. Hermes는 <code>-z</code>(oneshot) 경로에서 <code>HERMES_INFERENCE_MODEL</code>을 읽고, 셔틀이 쓰는 게 정확히 그 경로다. 설정 파일을 복제하면 나머지 항목이 곧 어긋난다.</p>
+      <pre><code>- { name: HERMES_INFERENCE_MODEL, value: "gpt-5.4-mini" }
+<span class="c"># 이 줄이 없으면 config.yaml 의 model.default 로 떨어진다</span></code></pre>
       <div class="note">
         <span class="lbl">프로바이더 이름이 <code>openai</code> 여야 한다</span>
         <p>모델만 주면 Hermes가 <strong>모델명에서 프로바이더를 자동 감지</strong>하는데, <code>gpt-*</code>는 <code>openai</code>로 풀린다. <code>config.yaml</code>의 프로바이더를 <code>openai-direct</code> 같은 다른 이름으로 두면 <code>Unknown provider 'openai'</code>로 죽는다. <code>HERMES_INFERENCE_PROVIDER</code>를 줘도 자동 감지가 이긴다.</p>
