@@ -847,6 +847,19 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
         </table>
       </div>
 
+      <h4>모델 — 사내 vLLM에서 내려왔다</h4>
+      <p>처음엔 사내 LiteLLM의 <code>SAMANDA-V3</code>(vLLM <code>qwen-qwen3-8-27b-fp8</code>)를 썼다. 2026-09-03 07:03 UTC에 그 Deployment가 <code>0/0</code>으로 내려갔고, 이 클러스터에는 GPU 노드가 없어 다시 뜨지 못한다. 사내 서빙 7개가 모두 같은 상태다.</p>
+      <div class="note">
+        <span class="lbl">Ready=True를 믿지 말 것</span>
+        <p><code>InferenceService</code>는 계속 <code>Ready: True</code>라고 보고한다. 진실은 predictor Service의 Endpoints에 있다 — 거기가 <code>&lt;none&gt;</code>이면 죽은 것이다.</p>
+        <pre><code>kubectl get endpoints &lt;name&gt;-predictor -n ai-kosmosai
+# ENDPOINTS = &lt;none&gt;  ← Ready=True 여도 죽어 있다</code></pre>
+      </div>
+      <p><strong>더 나쁜 건 그다음이다.</strong> 백엔드가 죽은 뒤에도 <code>SAMANDA-V3</code>를 부르면 오류가 아니라 <code>200</code>이 온다. LiteLLM이 조용히 OpenRouter의 <code>z-ai/glm-5.1</code>로 넘기기 때문이다. 응답 본문의 모델 이름을 보기 전까지는 알 수 없고, LiteLLM의 <code>/v1/model/info</code>는 그 모델을 여전히 <code>location: internal</code>이라고 보고한다.</p>
+      <pre><code>{"id":"gen-1788496137-...","model":"z-ai/glm-5.1", ...}
+#      ^^^ OpenRouter 형식 id       ^^^ 사내 모델이 아니다</code></pre>
+      <p>사내 모델을 부르는 줄 알면서 외부 제공자로 나가는 상태는 단순 장애보다 나쁘다. 그래서 <code>claude-sonnet-5</code>로 명시 전환했다 — 어차피 외부로 나갈 것이라면 설정에 그렇게 적혀 있어야 한다. GPU가 돌아오면 <code>hermes-config.yaml</code>의 <code>model.default</code> 한 줄만 되돌리면 된다.</p>
+
       <div class="note crit">
         <span class="lbl">이중 발행 주의</span>
         <p>발행 주체가 셔틀로 바뀌면 프로필의 "직접 <code>buzz messages send</code>로 발행하라" 지시를 <strong>반드시 함께 걷어내야 한다.</strong> 셸 도구를 가진 역할이 그 지시를 따르면 같은 답이 두 번 올라간다.</p>
@@ -1045,6 +1058,8 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
             <tr><td><code>openai_compat.py</code> <code>done</code> 이벤트</td><td><span class="chip open">미수정</span></td><td>내용을 버린다. 입력 필터 차단 등 <code>done</code>으로만 답이 오는 경로에서 빈 응답이 된다</td></tr>
             <tr><td>다른 postgresql CR</td><td><span class="chip stop">SyncFailed</span></td><td>§9.1과 동일 원인. 시크릿 복사로 해소된다</td></tr>
             <tr><td>GitOps</td><td><span class="chip run">도입</span></td><td>ArgoCD app-of-apps + Kustomize. 에이전트 이미지는 git write-back으로 자동 갱신, 릴레이는 알림만. §10.2</td></tr>
+            <tr><td>사내 vLLM (<code>SAMANDA-V3</code>)</td><td><span class="chip stop">다운</span></td><td>2026-09-03 GPU 노드 회수로 사내 서빙 7개 전부 정지. Hermes는 <code>claude-sonnet-5</code>로 전환. GPU 복귀 시 한 줄 롤백 — §7.3</td></tr>
+            <tr><td>LiteLLM 무언(無言) 폴백</td><td><span class="chip open">주의</span></td><td>사내 모델이 죽으면 오류 없이 외부 제공자로 넘어간다. <code>location: internal</code> 메타데이터도 그대로다. 사내 모델을 쓴다고 가정한 코드는 전부 재확인 필요</td></tr>
             <tr><td>Hermes 핫픽스 태그</td><td><span class="chip open">수동</span></td><td><code>v2026.7.7.2</code>처럼 4자리인 태그는 semver 파싱에서 걸러진다. 급하면 손으로 올리고, 아니면 다음 정규 릴리스에 함께 들어온다</td></tr>
           </tbody>
         </table>
