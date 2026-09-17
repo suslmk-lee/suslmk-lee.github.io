@@ -789,6 +789,25 @@ kubectl exec -n buzz deploy/buzz-agent-scout -- buzz users set-profile --name "S
       <pre><code>Hermes-Dev   …  → 생각 중… → 💻 preparing terminal… → 생각 중… → 답 → 최종 (27초, 편집 4)
 Hermes-PM    …  → 생각 중… ────────────── 55초 ────────────── → 답 → 최종 (65초, 편집 2)</code></pre>
       <p>PM의 55초는 모델(SAMANDA-V3)의 reasoning 구간이다. 예전엔 그동안 아무것도 없었다. 답 자체는 모델이 빨라(400자에 ~3초) 편집 한두 번에 채워진다 — 더 잘게 자라게 하려면 <code>HERMES_EDIT_INTERVAL</code>을 1초로 내리면 된다(쿼터 120/분 안).</p>
+      <h4>스트리밍이 부른 두 가지 사고</h4>
+      <p>답이 자라나게 만들자 두 가지가 따라왔다. 둘 다 "에이전트도 채널 참가자"라는 사실에서 나온다.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>증상</th><th>원인</th><th>고침</th></tr></thead>
+          <tbody>
+            <tr><td>Samanda가 Hermes의 <code>…</code>에 "본문이 비어 있다"고 답함</td><td>자리 메시지도 어엿한 kind 9다. Samanda는 멘션 없이 모든 메시지에 답하는 역할이었다</td><td>규칙 <code>filter</code>로 <code>content != "…"</code> 제외</td></tr>
+            <tr><td>에이전트끼리 서로를 부르는 핑퐁</td><td>멘션이 실제로 전달되기 시작하자, Samanda가 에이전트 대화 매 턴에 끼어들며 답에 <code>@Dev</code>를 넣어 또 깨웠다</td><td>작성자별 규칙 — 사람은 멘션 없이, 에이전트는 멘션됐을 때만</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>buzz-acp</code>에 "에이전트 작성자 제외" 옵션은 없지만, config 모드 규칙의 <code>filter</code> 식이 <code>author</code>(pubkey)를 본다. 우리 에이전트 9개의 pubkey를 제외 조건으로 넣었다. 대가는 유지보수다 — <strong>에이전트를 새로 올리면 그 pubkey를 규칙에 추가해야 한다.</strong> 빠뜨리면 Samanda가 그 에이전트의 모든 말에 답한다.</p>
+      <div class="fault">
+        <h4><span class="n">함정</span><span>규칙 순서가 곧 안전장치다</span></h4>
+        <p><code>match_event</code>는 규칙을 <strong>위에서부터 훑어 첫 매치</strong>가 이긴다. 그리고 <code>filter</code> 평가가 실패하면 <strong>fail-closed로 <code>return None</code></strong> — 그 뒤 규칙은 아예 보지 않는다.</p>
+        <p>필터가 붙은 규칙을 앞에 두었더니 Samanda가 <code>@Samanda</code> 멘션에도 답하지 않았다. 이벤트는 릴레이까지 정상 전달됐고 구독도 정상인데 하네스까지 오지 않았다. 조건 없는 멘션 규칙을 맨 앞으로 옮기자 바로 동작했다.</p>
+        <p><strong>조건이 없는 규칙을 앞에, 필터가 붙은 규칙을 뒤에.</strong> 앞 규칙의 평가 실패가 뒤 규칙까지 삼키지 않는 순서다.</p>
+      </div>
+
       <div class="note">
         <span class="lbl">☤ 상자를 못 찾으면</span>
         <p>업스트림이 장식을 바꾸면 파서가 빈손이 된다. 그때는 로그를 남기고 예전처럼 stdout 전체를 <code>clean()</code>한다 — 조용히 죽는 대신 거칠게라도 답한다. <code>clean()</code>에 헤더·푸터 제거를 추가해 두었다.</p>
