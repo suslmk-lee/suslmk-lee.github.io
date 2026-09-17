@@ -772,9 +772,26 @@ kubectl exec -n buzz deploy/buzz-agent-scout -- buzz users set-profile --name "S
          → 완료 시 최종 편집 = 전체 답
          → 실패해도 자리 메시지를 오류 문구로 편집 ("…" 가 남지 않는다)</code></pre>
       <p>실측: 자리 메시지 3초, 편집 3회, 11.5초에 완성 — 이벤트 4개. 편집도 이벤트라 에이전트 쿼터(120/분)에 잡히므로 간격(<code>SAMANDA_EDIT_INTERVAL</code>, 기본 2초)과 턴당 상한(<code>SAMANDA_EDIT_MAX</code>, 기본 60)을 둔다. 자리 메시지를 못 올리면 예전처럼 끝에 한 번 보낸다.</p>
+      <h4>Hermes — 두 번 속고 세 번째에 됐다</h4>
+      <p>같은 <code>Draft</code>를 Hermes 일곱에 붙였다. 문제는 "답을 받아오는 한 단계"였다.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>시도</th><th>결과</th><th>왜</th></tr></thead>
+          <tbody>
+            <tr><td><code>hermes -z</code></td><td>끝에 한 번에</td><td><code>oneshot.py</code>가 <code>stream_delta_callback = None</code>으로 스트리밍을 끈다</td></tr>
+            <tr><td><code>hermes chat -Q -q</code></td><td>끝에 한 번에</td><td><code>-Q</code>는 "최종만 출력". "첫 출력 2.9초"로 보였던 것은 <code>⚠ tirith</code> 경고줄이었다</td></tr>
+            <tr><td><code>hermes chat -q</code></td><td><strong>첫 바이트 1.7초, 58회에 걸쳐 흘러나옴</strong></td><td>대신 TTY용 장식이 섞인다</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>장식은 규칙적이다. 답은 정확히 <code>╭─ ☤ Hermes ─╮ … ╰─╯</code> 상자 안에만 있고, 그 앞은 <code>Query:</code>·<code>┌─ Reasoning ─┐</code>(모델의 생각)·<code>┊ 💻 $ cmd</code>(도구 진행), 뒤는 세션 요약이다. 상자 안만 잡는 상태기계를 두고, 상자 내부가 <code>COLUMNS=80</code>에서도 줄바꿈이 강제되지 않는 것(711자 한 줄)을 확인했다 — 서식이 깨지지 않는다.</p>
+      <p>덤으로 <strong>침묵 구간이 보이게</strong> 됐다. 상자가 열리기 전의 <code>Reasoning</code>은 "생각 중…", 도구 줄은 "💻 $ cmd"로 자리 메시지에 편집된다. 실측:</p>
+      <pre><code>Hermes-Dev   …  → 생각 중… → 💻 preparing terminal… → 생각 중… → 답 → 최종 (27초, 편집 4)
+Hermes-PM    …  → 생각 중… ────────────── 55초 ────────────── → 답 → 최종 (65초, 편집 2)</code></pre>
+      <p>PM의 55초는 모델(SAMANDA-V3)의 reasoning 구간이다. 예전엔 그동안 아무것도 없었다. 답 자체는 모델이 빨라(400자에 ~3초) 편집 한두 번에 채워진다 — 더 잘게 자라게 하려면 <code>HERMES_EDIT_INTERVAL</code>을 1초로 내리면 된다(쿼터 120/분 안).</p>
       <div class="note">
-        <span class="lbl">Hermes에 같은 것을 하려면</span>
-        <p><code>hermes -z</code>는 스트리밍 콜백을 일부러 꺼 둔다(<code>stream_delta_callback = None</code>). 대신 <code>hermes chat -Q -q</code>는 첫 토큰이 3초쯤에 나오고 <code>-t</code> 툴셋 제한도 지킨다 — 셔틀의 "답을 받아오는 한 단계"를 그쪽으로 바꾸면 같은 편집 방식이 그대로 붙는다.</p>
+        <span class="lbl">☤ 상자를 못 찾으면</span>
+        <p>업스트림이 장식을 바꾸면 파서가 빈손이 된다. 그때는 로그를 남기고 예전처럼 stdout 전체를 <code>clean()</code>한다 — 조용히 죽는 대신 거칠게라도 답한다. <code>clean()</code>에 헤더·푸터 제거를 추가해 두었다.</p>
       </div>
 
       <p><strong>이미지 빌드가 없다.</strong> <code>sprig</code>는 musl 정적 바이너리(13MB)라 아무 Alpine 위에서나 돈다.</p>
