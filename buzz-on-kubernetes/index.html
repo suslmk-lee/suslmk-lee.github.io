@@ -765,6 +765,18 @@ kubectl exec -n buzz deploy/buzz-agent-scout -- buzz users set-profile --name "S
                              │
                              └─▶ buzz messages send   (subprocess)</code></pre>
 
+      <h4>답이 자라나게 — 편집으로 만든 스트리밍</h4>
+      <p>처음엔 셔틀이 Samanda의 답을 끝까지 받은 뒤 <code>buzz messages send</code>를 한 번 호출했다. 10초 넘게 조용하다가 한 덩어리가 뚝 떨어진다. Buzz 메시지는 불변 이벤트라 토큰 스트리밍은 없지만, <strong>편집</strong>(kind 40003)은 있고 데스크톱이 실시간으로 다시 그린다. 그래서 순서를 바꿨다.</p>
+      <pre><code>멘션 수신 → 즉시 "…" send (스레드면 --reply-to 유지) → event_id
+         → SSE 델타 누적, 2초 간격으로 buzz messages edit
+         → 완료 시 최종 편집 = 전체 답
+         → 실패해도 자리 메시지를 오류 문구로 편집 ("…" 가 남지 않는다)</code></pre>
+      <p>실측: 자리 메시지 3초, 편집 3회, 11.5초에 완성 — 이벤트 4개. 편집도 이벤트라 에이전트 쿼터(120/분)에 잡히므로 간격(<code>SAMANDA_EDIT_INTERVAL</code>, 기본 2초)과 턴당 상한(<code>SAMANDA_EDIT_MAX</code>, 기본 60)을 둔다. 자리 메시지를 못 올리면 예전처럼 끝에 한 번 보낸다.</p>
+      <div class="note">
+        <span class="lbl">Hermes에 같은 것을 하려면</span>
+        <p><code>hermes -z</code>는 스트리밍 콜백을 일부러 꺼 둔다(<code>stream_delta_callback = None</code>). 대신 <code>hermes chat -Q -q</code>는 첫 토큰이 3초쯤에 나오고 <code>-t</code> 툴셋 제한도 지킨다 — 셔틀의 "답을 받아오는 한 단계"를 그쪽으로 바꾸면 같은 편집 방식이 그대로 붙는다.</p>
+      </div>
+
       <p><strong>이미지 빌드가 없다.</strong> <code>sprig</code>는 musl 정적 바이너리(13MB)라 아무 Alpine 위에서나 돈다.</p>
       <ul>
         <li><code>initContainer</code> (<code>buzz-sprig</code>) → <code>sprig</code> + 심볼릭 링크 6개를 emptyDir로 복사</li>
