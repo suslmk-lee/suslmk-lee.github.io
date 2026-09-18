@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Buzz 릴레이와 AI 에이전트 7종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
+<meta name="description" content="Buzz 릴레이와 AI 에이전트 9종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Buzz on Kubernetes">
-<meta property="og:description" content="Buzz 릴레이와 AI 에이전트 7종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
+<meta property="og:description" content="Buzz 릴레이와 AI 에이전트 9종을 쿠버네티스에 24시간 상주 구성으로 배포한 기록. 설치 절차, ACP 통합, GitOps 자동 갱신, 실제로 겪은 트러블슈팅.">
 <meta property="og:locale" content="ko_KR">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
 <title>Buzz on Kubernetes</title>
@@ -620,7 +620,7 @@ footer {
           <div class="drow">
             <div class="dnode"><b>Scout</b><i>buzz-agent → OpenAI</i></div>
             <div class="dnode"><b>Samanda</b><i>samanda-acp 셔틀<br>→ agent-api 내부 직결</i></div>
-            <div class="dnode"><b>Hermes ×5</b><i>hermes-acp 셔틀<br>→ hermes -z → LiteLLM</i></div>
+            <div class="dnode"><b>Hermes ×7</b><i>hermes-acp 셔틀<br>→ hermes chat -q → LiteLLM</i></div>
           </div>
         </div>
       </div>
@@ -632,9 +632,9 @@ footer {
         <div><dt>redis</dt><dd><span class="chip run">running</span></dd></div>
         <div><dt>scout</dt><dd><span class="chip run">running</span></dd></div>
         <div><dt>samanda</dt><dd><span class="chip run">running</span></dd></div>
-        <div><dt>hermes ×5</dt><dd><span class="chip run">running</span></dd></div>
+        <div><dt>hermes ×7</dt><dd><span class="chip run">running</span></dd></div>
       </dl>
-      <p>pm / dev / devops / qa / security. 역할마다 <code>SOUL.md</code>와 허용 toolset이 다르다 — §7.3.</p>
+      <p>pm / dev / devops / qa / security / <strong>akashiq</strong> / <strong>wiki</strong>. 역할마다 <code>SOUL.md</code>와 허용 toolset이 다르다 — §7.3.</p>
 
       <div class="tw">
         <table>
@@ -718,8 +718,21 @@ kubectl -n buzz create secret generic buzz-secrets \
 
       <div class="note crit">
         <span class="lbl">복구 불가</span>
-        <p><code>BUZZ_RELAY_PRIVATE_KEY</code>는 릴레이 신원 그 자체다. 잃으면 복구할 수 없고, 바꾸면 다른 릴레이가 된다. 생성 즉시 백업할 것.</p>
+        <p><code>BUZZ_RELAY_PRIVATE_KEY</code>는 릴레이 신원 그 자체다. 잃으면 복구할 수 없고, 바꾸면 다른 릴레이가 된다. 생성 즉시 백업할 것. 에이전트 개인키도 같다 — 키가 곧 그 에이전트이고, 바꾸면 채널에서 다른 사람이 된다.</p>
       </div>
+      <p>매니페스트는 전부 Git에 있으므로 클러스터를 다시 세우면 워크로드는 복구된다. <strong>복구되지 않는 것은 시크릿뿐이고, 무엇이 들어가야 하는지를 적어두지 않으면 그게 곧 단절점이다.</strong></p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>시크릿</th><th>담긴 것</th></tr></thead>
+          <tbody>
+            <tr><td><code>buzz-agent-scout</code></td><td>에이전트 개인키, OpenAI 키</td></tr>
+            <tr><td><code>buzz-agent-samanda</code></td><td>에이전트 개인키, agent-api PAT</td></tr>
+            <tr><td><code>buzz-agent-hermes-*</code></td><td>에이전트 개인키, LiteLLM 키, OpenAI 키</td></tr>
+            <tr><td><code>buzz-agent-hermes-akashiq</code></td><td>위 셋 + GitLab 토큰 2개 — <code>write_repository</code>(위키) · <code>read_repository</code>(소스)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>AkashiQ의 토큰 둘이 없으면 매니페스트가 복구돼도 에이전트는 위키를 읽지도 쓰지도 못하고, 같은 자격증명을 쓰는 <code>akashiq-wiki-commit</code> CronJob의 푸시까지 멈춘다. 토큰은 remote URL에 박지 않는다 — <code>.git/config</code>에 영구히 남는다. credential store에 넣고 URL은 깨끗하게 둔다.</p>
 
       <h3><span class="n">6.4</span>릴레이 설치</h3>
       <pre><code>helm upgrade --install buzz oci://ghcr.io/block/buzz/charts/buzz \
@@ -892,12 +905,34 @@ kubectl -n buzz rollout restart deploy/buzz-agent-samanda</code></pre>
             <tr><td>Dev</td><td><code>terminal,file,code_execution,memory,skills</code></td><td><code>SAMANDA-V3</code></td></tr>
             <tr><td>QA</td><td><code>terminal,code_execution,memory,skills</code></td><td><code>SAMANDA-V3</code></td></tr>
             <tr><td>DevOps · Security</td><td><code>terminal,file,memory,skills</code></td><td><code>SAMANDA-V3</code></td></tr>
+            <tr><td>AkashiQ</td><td><code>clarify,terminal,memory,skills</code></td><td><code>SAMANDA-V3</code></td></tr>
+            <tr><td>Wiki</td><td><code>terminal,file,memory,skills</code></td><td><code>SAMANDA-V3</code></td></tr>
           </tbody>
         </table>
       </div>
       <p>그래서 모델은 <strong>ConfigMap을 쪼개지 않고</strong> 에이전트별 env 한 줄로 갈린다. 배치를 바꾸는 게 한 줄 옮기기가 되고, 재시작 한 번이면 끝난다. Hermes는 <code>-z</code>(oneshot) 경로에서 <code>HERMES_INFERENCE_MODEL</code>을 읽고, 셔틀이 쓰는 게 정확히 그 경로다. 설정 파일을 복제하면 나머지 항목이 곧 어긋난다.</p>
       <pre><code>- { name: HERMES_INFERENCE_MODEL, value: "gpt-5.4-mini" }
 <span class="c"># 이 줄이 없으면 config.yaml 의 model.default 로 떨어진다</span></code></pre>
+      <h4>여섯째와 일곱째 — 저장소를 물고 있는 역할</h4>
+      <p>앞의 다섯은 순수한 대화 상대다. 뒤의 둘은 <strong>바깥 저장소를 물고 있다.</strong></p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>역할</th><th>하는 일</th><th>바깥 의존</th></tr></thead>
+          <tbody>
+            <tr><td><strong>AkashiQ</strong></td><td>제품 위키의 질문 창구. "왜 이렇게 만들어졌나"에 근거와 함께 답한다</td><td>GitLab <code>akashiq-wiki</code>(읽기·쓰기) · <code>akashiq-sources</code>(읽기)</td></tr>
+            <tr><td><strong>Wiki</strong></td><td>채널 이력을 위키 문서로 정리해 넣는다 (<code>wiki-fetch</code>)</td><td>같은 체크아웃을 공유</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>체크아웃은 <code>hermes-learning</code> PVC 위에 산다. initContainer가 기동할 때 <code>pull</code> 하고, <code>akashiq-wiki-commit</code> CronJob이 10분마다 바뀐 문서를 되밀어 넣는다. 사람이 GitLab에서 보는 위키와 에이전트가 답하는 근거가 같은 문서다.</p>
+      <div class="fault">
+        <h4><span class="n">함정</span><span>PVC에 남은 체크아웃은 옛 origin을 기억한다</span></h4>
+        <p>GitLab 도메인을 옮기며 clone 주소만 바꿨더니, 이미 PVC에 있던 체크아웃의 <code>origin</code>은 옛 호스트를 그대로 가리켰다. 자격증명은 새 호스트 것만 있어 <code>pull</code>이 실패하는데 스크립트가 그 실패를 삼켜 <strong>종료 코드 0으로 떴다</strong> — 위키가 옛 커밋에 얼어붙은 채 에이전트가 답한다.</p>
+        <pre><code>fatal: could not read Username for 'https://old.example.com/...': No such device or address
+pull 실패: /opt/data/wiki   <span class="c">← 그래도 exit 0</span></code></pre>
+        <p><code>pull</code> 직전에 <code>git remote set-url origin</code>으로 매번 현재 호스트에 맞춘다. 호스트가 또 바뀌어도 살아남는다.</p>
+      </div>
+
       <h4>자기 진화 — 켜져 있는 줄 알았지만 아니었다</h4>
       <p>Hermes의 내세우는 기능 중 하나가 스스로 쌓는 기억이다. 그런데 두 가지가 막고 있었다.</p>
       <pre><code>$ hermes memory status
@@ -1143,8 +1178,8 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
         <table>
           <thead><tr><th>이미지</th><th>쓰는 곳</th><th>전략</th></tr></thead>
           <tbody>
-            <tr><td><code>ghcr.io/block/buzz-sprig:main</code></td><td>에이전트 7개 전부의 initContainer</td><td><code>digest</code> — 움직이는 태그의 다이제스트를 추적</td></tr>
-            <tr><td><code>nousresearch/hermes-agent</code></td><td>Hermes 5개</td><td><code>semver</code> — <code>vYYYY.M.D</code> 중 최신</td></tr>
+            <tr><td><code>ghcr.io/block/buzz-sprig:main</code></td><td>에이전트 9개 전부의 initContainer</td><td><code>digest</code> — 움직이는 태그의 다이제스트를 추적</td></tr>
+            <tr><td><code>nousresearch/hermes-agent</code></td><td>Hermes 7개</td><td><code>semver</code> — <code>vYYYY.M.D</code> 중 최신</td></tr>
           </tbody>
         </table>
       </div>
@@ -1191,7 +1226,7 @@ BUZZ_PRIVATE_KEY="$(cat /opt/buzz/.key)" exec /opt/buzz/bin/buzz "$@"</code></pr
             <tr><td><code>openai_compat.py</code> <code>done</code> 이벤트</td><td><span class="chip open">미수정</span></td><td>내용을 버린다. 입력 필터 차단 등 <code>done</code>으로만 답이 오는 경로에서 빈 응답이 된다</td></tr>
             <tr><td>다른 postgresql CR</td><td><span class="chip stop">SyncFailed</span></td><td>§9.1과 동일 원인. 시크릿 복사로 해소된다</td></tr>
             <tr><td>GitOps</td><td><span class="chip run">도입</span></td><td>ArgoCD app-of-apps + Kustomize. 에이전트 이미지는 git write-back으로 자동 갱신, 릴레이는 알림만. §10.2</td></tr>
-            <tr><td>사내 vLLM (<code>SAMANDA-V3</code>)</td><td><span class="chip run">복구</span></td><td>2026-09-03 GPU 회수로 정지, 09-07 GPU 복귀로 복구. Hermes 5개 모두 사내 모델로 복귀. 다시 내려가면 <code>model.default</code>도 같이 바꿀 것 — §7.3</td></tr>
+            <tr><td>사내 vLLM (<code>SAMANDA-V3</code>)</td><td><span class="chip run">복구</span></td><td>2026-09-03 GPU 회수로 정지, 09-07 GPU 복귀로 복구. Hermes 7개 모두 사내 모델로 복귀. 다시 내려가면 <code>model.default</code>도 같이 바꿀 것 — §7.3</td></tr>
             <tr><td>LiteLLM 무언(無言) 폴백</td><td><span class="chip open">주의</span></td><td>정지한 사내 모델을 계속 부르면 오류 없이 외부 제공자로 넘어가고 <code>location: internal</code> 메타데이터도 그대로다. 사내 모델 이름이 남아 있는 설정은 전부 재확인 필요</td></tr>
             <tr><td>Hermes 핫픽스 태그</td><td><span class="chip open">수동</span></td><td><code>v2026.7.7.2</code>처럼 4자리인 태그는 semver 파싱에서 걸러진다. 급하면 손으로 올리고, 아니면 다음 정규 릴리스에 함께 들어온다</td></tr>
           </tbody>
